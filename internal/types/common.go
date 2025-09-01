@@ -29,24 +29,24 @@ type Op[T any] struct {
 type RemoteVersion map[string]int // [agent] : last known sequence number
 
 type OpLog[T any] struct {
-	ops      []Op[T]
+	Ops      []Op[T]
 	frontier []LV
 	version  RemoteVersion
 }
 
 func NewOpLog[T any]() OpLog[T] {
 	return OpLog[T]{
-		ops:      []Op[T]{},
+		Ops:      []Op[T]{},
 		frontier: []LV{},
 		version:  make(map[string]int),
 	}
 }
 
-func appendLocalOp[T any](oplog OpLog[T], agent string, op InnerOp[T]) {
+func appendLocalOp[T any](oplog *OpLog[T], agent string, op InnerOp[T]) {
 	seq := oplog.version[agent] + 1
-	lv := len(oplog.ops)
+	lv := len(oplog.Ops)
 
-	oplog.ops = append(oplog.ops, Op[T]{
+	oplog.Ops = append(oplog.Ops, Op[T]{
 		InnerOp: op,
 		id:      ID{agent, seq},
 		parents: oplog.frontier,
@@ -56,10 +56,37 @@ func appendLocalOp[T any](oplog OpLog[T], agent string, op InnerOp[T]) {
 	oplog.version[agent] = seq
 }
 
-func LocalInsert[T any](oplog OpLog[T], agent string, pos int, content T) {
-	appendLocalOp(oplog, agent, InnerOp[T]{optype: Insert, pos: pos, content: content})
+func LocalInsert[T any](oplog *OpLog[T], agent string, pos int, content any) {
+	if str, ok := content.(string); ok {
+		if stringOpLog, ok := any(oplog).(*OpLog[string]); ok { // honestly disgusting but I can't think of something better
+			for _, c := range str {
+				appendLocalOp[string](stringOpLog, agent, InnerOp[string]{
+					optype:  Insert,
+					pos:     pos,
+					content: string(c),
+				})
+				pos++
+			}
+			return
+		}
+	}
+
+	if slice, ok := content.([]T); ok {
+		for _, c := range slice {
+			appendLocalOp(oplog, agent, InnerOp[T]{
+				optype:  Insert,
+				pos:     pos,
+				content: c,
+			})
+			pos++
+		}
+		return
+	}
 }
 
-func LocalDelete[T any](oplog OpLog[T], agent string, pos int) {
-	appendLocalOp(oplog, agent, InnerOp[T]{optype: Delete, pos: pos})
+func LocalDelete[T any](oplog *OpLog[T], agent string, pos int, delLen int) {
+	for i := delLen; i > 0; i-- {
+		appendLocalOp(oplog, agent, InnerOp[T]{optype: Delete, pos: pos})
+		// pos doesn't need to be modified as proceeding characters will elide
+	}
 }
