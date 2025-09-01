@@ -24,7 +24,7 @@ type LV int // index for op log
 
 func sortLV(frontier []LV) []LV {
 	sort.Slice(frontier, func(i, j int) bool {
-		return frontier[i] > frontier[j]
+		return frontier[i] < frontier[j]
 	})
 	return frontier
 }
@@ -77,7 +77,13 @@ func NewOpLog[T any]() OpLog[T] {
 }
 
 func appendLocalOp[T any](oplog *OpLog[T], agent string, op InnerOp[T]) {
-	seq := oplog.version[agent] + 1
+	seq := -1
+
+	if v, ok := oplog.version[agent]; ok {
+		seq = v
+	} else {
+		seq++
+	}
 	lv := len(oplog.Ops)
 
 	oplog.Ops = append(oplog.Ops, Op[T]{
@@ -159,19 +165,22 @@ func PushRemoteOp[T any](oplog *OpLog[T], op Op[T], parentIds []ID) {
 	oplog.frontier = advanceFrontier(oplog.frontier, lv, parents)
 
 	if lastKnownSeq+1 != seq {
+		fmt.Printf("lastSeen: %d seq: %d agent: %v", lastKnownSeq, seq, op.id.agent)
 		return
 	}
 	oplog.version[agent] = seq // assumes that seq = lastKnownSeq + 1, b tree implementation would likely not need this invariant
 
 }
 
-func MergeInto[T any](dest OpLog[T], src OpLog[T]) {
+func MergeInto[T any](dest *OpLog[T], src *OpLog[T]) {
 	// in real network call we would have to make some network calls
 	// 1. find local seq -> 2. request remote ->
 	// 3. remote returns all new changes since version -> 4. take events and merge
 
-	// for _, op := range src.Ops {
-
-	// }
-	return
+	for _, op := range src.Ops {
+		parentIDs := util.MapN[LV, ID](op.parents, func(l LV) (v ID, e error) {
+			return src.Ops[int(l)].id, nil
+		})
+		PushRemoteOp(dest, op, parentIDs)
+	}
 }
