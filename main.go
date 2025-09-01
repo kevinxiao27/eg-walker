@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/kevinxiao27/eg-walker/internal/ol"
+	"github.com/kevinxiao27/eg-walker/ol"
 )
 
 func main() {
