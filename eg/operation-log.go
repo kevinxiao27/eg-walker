@@ -1,4 +1,4 @@
-package ol
+package eg
 
 import (
 	"fmt"
@@ -43,9 +43,9 @@ func appendLocalOp[T any](oplog *OpLog[T], agent string, op InnerOp[T]) {
 
 	if v, ok := oplog.version[agent]; ok {
 		seq = v
-	} else {
-		seq++
 	}
+
+	seq++
 	lv := len(oplog.Ops)
 
 	oplog.Ops = append(oplog.Ops, Op[T]{

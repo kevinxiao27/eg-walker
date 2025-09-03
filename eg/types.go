@@ -1,4 +1,4 @@
-package ol
+package eg
 
 type ID struct { // GUID
 	agent string
