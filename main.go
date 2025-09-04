@@ -16,7 +16,6 @@ func main() {
 	eg.MergeInto(&oplog2, &oplog1)
 
 	eg.Checkout(oplog1)
-	// litter.Dump(oplog1)
-	// litter.Dump(oplog2)
+	litter.Dump(oplog1)
 
 }

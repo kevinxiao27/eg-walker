@@ -30,3 +30,11 @@ func Reduce[T, V any](ts []T, acc func(t T, v V) V, base V) V {
 
 	return base
 }
+
+func Choose[T any](condition bool, trueVal T, falseVal T) T {
+	if condition {
+		return trueVal
+	} else {
+		return falseVal
+	}
+}

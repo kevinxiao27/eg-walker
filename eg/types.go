@@ -37,3 +37,23 @@ type OpLog[T any] struct {
 	frontier []LV
 	version  RemoteVersion
 }
+
+const (
+	NOT_YET_INSERTED int = -1
+	INSERTED         int = 0
+)
+
+type CRDTItem struct {
+	lv          LV
+	originLeft  LV // -1 as not set value
+	originRight LV
+	deleted     bool
+	curState    int
+}
+
+type CRDTDoc struct {
+	items          []CRDTItem
+	currentVersion []LV
+	delTargets     []LV       // LV of delete OP
+	itemsByLV      []CRDTItem // Map from LV => CRDTItem
+}
