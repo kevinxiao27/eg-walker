@@ -1,8 +1,6 @@
 package eg
 
 import (
-	"fmt"
-
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/kevinxiao27/eg-walker/util"
 )
@@ -122,7 +120,6 @@ func integrate[T any](oplog OpLog[T], doc *CRDTDoc, newItem *CRDTItem, idx int, 
 		newItemAgent := oplog.ops[newItem.lv].id.agent
 		otherAgent := oplog.ops[other.lv].id.agent
 
-		fmt.Printf(newItemAgent, otherAgent, newItemAgent < otherAgent)
 		if oLeft < left ||
 			(oLeft == left && oRight == right && newItemAgent < otherAgent) {
 			break
