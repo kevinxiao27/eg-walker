@@ -33,7 +33,7 @@ type Op[T any] struct {
 type RemoteVersion map[string]int // [agent] : last known sequence number
 
 type OpLog[T any] struct {
-	Ops      []Op[T]
+	ops      []Op[T]
 	frontier []LV
 	version  RemoteVersion
 }

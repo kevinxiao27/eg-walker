@@ -18,4 +18,6 @@ func main() {
 	eg.Checkout(oplog1)
 	litter.Dump(oplog1)
 
+	result := eg.Checkout(oplog1)
+	litter.Dump(result)
 }

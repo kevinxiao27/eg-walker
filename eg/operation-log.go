@@ -32,7 +32,7 @@ func advanceFrontier(frontier []LV, lv LV, parents []LV) []LV {
 
 func NewOpLog[T any]() OpLog[T] {
 	return OpLog[T]{
-		Ops:      []Op[T]{},
+		ops:      []Op[T]{},
 		frontier: []LV{},
 		version:  make(map[string]int),
 	}
@@ -46,9 +46,9 @@ func appendLocalOp[T any](oplog *OpLog[T], agent string, op InnerOp[T]) {
 	}
 
 	seq++
-	lv := len(oplog.Ops)
+	lv := len(oplog.ops)
 
-	oplog.Ops = append(oplog.Ops, Op[T]{
+	oplog.ops = append(oplog.ops, Op[T]{
 		InnerOp: op,
 		id:      ID{agent, seq},
 		parents: oplog.frontier,
@@ -96,7 +96,7 @@ func LocalDelete[T any](oplog *OpLog[T], agent string, pos int, delLen int) {
 func mapIDtoLV[T any](oplog *OpLog[T], id ID) (LV, error) {
 	// optimization uses B-tree
 
-	for i, op := range oplog.Ops {
+	for i, op := range oplog.ops {
 		if IdEq(op.id, id) {
 			return LV(i), nil
 		}
@@ -116,14 +116,14 @@ func PushRemoteOp[T any](oplog *OpLog[T], op Op[T], parentIds []ID) {
 		return
 	}
 
-	lv := LV(len(oplog.Ops))
+	lv := LV(len(oplog.ops))
 
 	funcParentsToLV := func(id ID) (LV, error) {
 		return mapIDtoLV(oplog, id)
 	}
 	parents := sortLV(util.MapN[ID, LV](parentIds, funcParentsToLV))
 
-	oplog.Ops = append(oplog.Ops, Op[T]{InnerOp: op.InnerOp, id: op.id, parents: parents})
+	oplog.ops = append(oplog.ops, Op[T]{InnerOp: op.InnerOp, id: op.id, parents: parents})
 	oplog.frontier = advanceFrontier(oplog.frontier, lv, parents)
 
 	if lastKnownSeq+1 != seq {
@@ -139,9 +139,9 @@ func MergeInto[T any](dest *OpLog[T], src *OpLog[T]) {
 	// 1. find local seq -> 2. request remote ->
 	// 3. remote returns all new changes since version -> 4. take events and merge
 
-	for _, op := range src.Ops {
+	for _, op := range src.ops {
 		parentIDs := util.MapN[LV, ID](op.parents, func(l LV) (v ID, e error) {
-			return src.Ops[int(l)].id, nil
+			return src.ops[int(l)].id, nil
 		})
 		PushRemoteOp(dest, op, parentIDs)
 	}
