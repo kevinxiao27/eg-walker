@@ -5,7 +5,6 @@ import (
 
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/kevinxiao27/eg-walker/util"
-	"github.com/sanity-io/litter"
 )
 
 func expandLVToSet[T any](oplog OpLog[T], frontier []LV) mapset.Set[LV] {
@@ -34,30 +33,41 @@ type DiffResult struct {
 	bOnly []LV
 }
 
-func retreat[T any](doc CRDTDoc, oplog OpLog[T], opLV LV) {
+func retreat[T any](doc *CRDTDoc, oplog OpLog[T], opLV LV) {
 	op := oplog.ops[opLV]
-	target := util.Choose((op.optype == Insert), opLV, doc.delTargets[opLV])
+	var target LV
+	if op.optype == Insert {
+		target = opLV
+	} else {
+		target = (*doc.delTargets)[opLV]
+	}
 
 	item := doc.itemsByLV[target]
-	litter.Dump(doc)
 	item.curState-- // INS -> NYI -> D-0 -> ... -> D-N
 }
 
-func advance[T any](doc CRDTDoc, oplog OpLog[T], opLV LV) {
+func advance[T any](doc *CRDTDoc, oplog OpLog[T], opLV LV) {
 	op := oplog.ops[opLV]
-	target := util.Choose((op.optype == Insert), opLV, doc.delTargets[opLV])
+	var target LV
+	if op.optype == Insert {
+		target = opLV
+	} else {
+		target = (*doc.delTargets)[opLV]
+	}
 
 	item := doc.itemsByLV[target]
 	item.curState++ // D_N -> ... -> D-0 -> NYI -> I
 }
 
-func findByCurrentPos(items []CRDTItem, targetPos int) (idx int, endPos int) {
+func findByCurrentPos(items []*CRDTItem, targetPos int) (idx int, endPos int) {
 	curPos := 0
 	endPos = 0
+	idx = 0
 
-	for idx := 0; curPos < targetPos; idx++ {
+	for curPos < targetPos {
 		if idx >= len(items) {
-			print("Attempted to index out of bounds of array, illegal state encountered: %v", idx)
+			// If we've gone past the end of items, we can't find the target position
+			break
 		}
 
 		item := items[idx]
@@ -70,51 +80,58 @@ func findByCurrentPos(items []CRDTItem, targetPos int) (idx int, endPos int) {
 		if !item.deleted {
 			endPos++
 		}
+		idx++
 	}
 
 	return idx, endPos
 }
 
-func findItemIdxAtLV(items []CRDTItem, target LV) int {
-	for i := 0; i < len(items); i++ {
+func findItemIdxAtLV(items []*CRDTItem, target LV) int {
+	for i := range len(items) {
 		if items[i].lv == target {
 			return i
 		}
 	}
 
-	print("something terrible has occured and we were unable to find target in CRDTItems")
-
 	return -1
 }
 
-func integrate[T any](oplog OpLog[T], doc CRDTDoc, newItem CRDTItem, idx int, endPos int, snapshot *[]T) {
+func integrate[T any](oplog OpLog[T], doc *CRDTDoc, newItem *CRDTItem, idx int, endPos int, snapshot *[]T) {
 	scanIdx := idx
 	scanEndPos := endPos
 
 	// if originLeft is null, we can pretend we're inserting to the right of -1
 	left := scanIdx - 1
-	right := util.Choose(newItem.originRight == LV(-1), len(doc.items), findItemIdxAtLV(doc.items, newItem.originRight))
+	right := util.Choose(newItem.originRight == LV(-1), len(*doc.items), findItemIdxAtLV(*doc.items, newItem.originRight))
+	if right == -1 {
+		right = len(*doc.items)
+	}
 	scanning := false
 
-	for i := left + 1; ; i++ {
-		other := doc.items[scanIdx]
+	for scanIdx < right {
+		other := (*doc.items)[scanIdx]
 		if other.curState != NOT_YET_INSERTED {
 			break
 		}
 
 		// -1 is our stand in for unset
-		oLeft := util.Choose(other.originLeft == LV(-1), -1, findItemIdxAtLV(doc.items, other.originLeft))
-		oRight := util.Choose(other.originRight == LV(-1), len(doc.items), findItemIdxAtLV(doc.items, other.originRight))
+		oLeft := util.Choose(other.originLeft == LV(-1), -1, findItemIdxAtLV(*doc.items, other.originLeft))
+		oRight := util.Choose(other.originRight == LV(-1), len(*doc.items), findItemIdxAtLV(*doc.items, other.originRight))
 
-		// if our
+		// Compare with TypeScript logic
+		newItemAgent := oplog.ops[newItem.lv].id.agent
+		otherAgent := oplog.ops[other.lv].id.agent
+
+		fmt.Printf(newItemAgent, otherAgent, newItemAgent < otherAgent)
 		if oLeft < left ||
-			(oLeft == left && oRight == right && oplog.ops[newItem.lv].id.agent < oplog.ops[other.lv].id.agent) {
+			(oLeft == left && oRight == right && newItemAgent < otherAgent) {
 			break
 		}
 
 		if oLeft == left {
 			scanning = oRight < right
 		}
+
 		if !other.deleted {
 			scanEndPos++
 		}
@@ -126,16 +143,16 @@ func integrate[T any](oplog OpLog[T], doc CRDTDoc, newItem CRDTItem, idx int, en
 		}
 	}
 
-	doc.items = append(doc.items[:idx], append([]CRDTItem{newItem}, doc.items[idx:]...)...)
+	(*doc.items) = append((*doc.items)[:idx], append([]*CRDTItem{newItem}, (*doc.items)[idx:]...)...)
 
 	op := oplog.ops[newItem.lv]
 	if op.optype != Insert {
-		print("Something horrible has gone wrong and we cannot insert a delete")
+		print("Something horrible has gone wrong and we cannot insert a delete\n")
 	}
 	*snapshot = append((*snapshot)[:endPos], append([]T{op.content}, (*snapshot)[endPos:]...)...)
 }
 
-func apply[T any](doc CRDTDoc, oplog OpLog[T], snapshot *[]T, opLV LV) {
+func apply[T any](doc *CRDTDoc, oplog OpLog[T], snapshot *[]T, opLV LV) {
 	op := oplog.ops[opLV]
 
 	if op.optype == Delete {
@@ -144,26 +161,31 @@ func apply[T any](doc CRDTDoc, oplog OpLog[T], snapshot *[]T, opLV LV) {
 		// 2. modify snapshot (actually remove the item)
 		// pos may only be used when we have replayed all parent history
 
-		idx, endPos := findByCurrentPos(doc.items, op.pos)
+		idx, endPos := findByCurrentPos(*doc.items, op.pos)
 
 		// scan forwards to find actual item
-		for doc.items[idx].curState != INSERTED {
-			if !doc.items[idx].deleted {
+		for (*doc.items)[idx].curState != INSERTED {
+			if !(*doc.items)[idx].deleted {
 				endPos++
 			}
 			idx++
 		}
 
-		if !doc.items[idx].deleted {
-			doc.items[idx].deleted = true
-			*snapshot = append((*snapshot)[:endPos-1], (*snapshot)[endPos+1:]...)
+		// This is the item to delete
+		item := (*doc.items)[idx]
+		if !item.deleted {
+			item.deleted = true
+
+			*snapshot = append((*snapshot)[:endPos], (*snapshot)[endPos+1:]...)
+
 		}
 
-		doc.items[idx].curState = 1
-		doc.delTargets[opLV] = doc.items[idx].lv
+		item.curState = 1
+		(*doc.delTargets)[opLV] = item.lv
+
 	} else {
 		// INSERT
-		idx, endPos := findByCurrentPos(doc.items, op.pos)
+		idx, endPos := findByCurrentPos(*doc.items, op.pos)
 
 		// item will definitely be in inserted state, findByCurrentPos
 		// invariably terminates as a result of encountering an insertion
@@ -171,26 +193,25 @@ func apply[T any](doc CRDTDoc, oplog OpLog[T], snapshot *[]T, opLV LV) {
 		if idx == 0 {
 			originLeft = -1
 		} else {
-			originLeft = doc.items[idx-1].lv
+			originLeft = (*doc.items)[idx-1].lv
 		}
 
-		//scan
+		//scan for originRight starting from idx
 		originRight := LV(-1)
-		for i := 0; i < len(doc.items); i++ {
-			tmp := doc.items[i]
+		for i := idx; i < len((*doc.items)); i++ {
+			tmp := (*doc.items)[i]
 			if tmp.curState != NOT_YET_INSERTED {
 				originRight = tmp.lv
 				break
 			}
-
 		}
 
-		item := CRDTItem{
+		item := &CRDTItem{
 			lv:          opLV,
 			originLeft:  originLeft,
 			originRight: originRight,
 			deleted:     false,
-			curState:    NOT_YET_INSERTED,
+			curState:    INSERTED,
 		}
 
 		doc.itemsByLV[opLV] = item
@@ -207,17 +228,20 @@ func diff[T any](oplog OpLog[T], a []LV, b []LV) DiffResult {
 	bExpand := expandLVToSet(oplog, b)
 
 	return DiffResult{
-		aOnly: aExpand.Difference(bExpand).ToSlice(),
-		bOnly: bExpand.Difference(aExpand).ToSlice(),
+		aOnly: mapset.Sorted(aExpand.Difference(bExpand)),
+		bOnly: mapset.Sorted(bExpand.Difference(aExpand)),
 	}
 }
 
 func Checkout[T any](oplog OpLog[T]) []T {
+	items := []*CRDTItem{}
+	cv := make([]LV, 0)
+	dt := make([]LV, 0)
 	doc := CRDTDoc{
-		items:          []CRDTItem{},
-		currentVersion: []LV{},
-		delTargets:     []LV{},
-		itemsByLV:      []CRDTItem{},
+		items:          &items,
+		currentVersion: &cv,
+		delTargets:     &dt,
+		itemsByLV:      make(map[LV]*CRDTItem),
 	}
 
 	snapshot := []T{}
@@ -225,29 +249,22 @@ func Checkout[T any](oplog OpLog[T]) []T {
 	for lv := 0; lv < len(oplog.ops); lv++ {
 		op := oplog.ops[lv]
 
-		diff := diff(oplog, doc.currentVersion, op.parents)
+		diff := diff(oplog, *doc.currentVersion, op.parents)
 		aOnly, bOnly := diff.aOnly, diff.bOnly
 
 		// retreat things not included
 		for _, i := range aOnly {
-			fmt.Printf("retreat: %v\n", i)
-			retreat(doc, oplog, i)
+			retreat(&doc, oplog, i)
 		}
-
-		// refers to union difference of toExpand and currentVersion
-		litter.Dump(doc)
 
 		for _, i := range bOnly {
-			fmt.Printf("advance: %v\n", i)
-			advance(doc, oplog, i)
+			advance(&doc, oplog, i)
 		}
 
-		litter.Dump(doc)
-
 		// apply operation
-		fmt.Printf("apply: %v\n", lv) // add to []items
-		apply(doc, oplog, &snapshot, LV(lv))
-		doc.currentVersion = []LV{LV(lv)}
+		apply(&doc, oplog, &snapshot, LV(lv))
+		cv := []LV{LV(lv)}
+		doc.currentVersion = &cv // suspicious lil use after free but all good
 	}
 
 	return snapshot

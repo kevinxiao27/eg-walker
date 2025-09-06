@@ -146,3 +146,24 @@ func MergeInto[T any](dest *OpLog[T], src *OpLog[T]) {
 		PushRemoteOp(dest, op, parentIDs)
 	}
 }
+
+// Getter methods for debugging
+func (oplog *OpLog[T]) GetOps() []Op[T] {
+	return oplog.ops
+}
+
+func (oplog *OpLog[T]) GetFrontier() []LV {
+	return oplog.frontier
+}
+
+func (oplog *OpLog[T]) GetVersion() RemoteVersion {
+	return oplog.version
+}
+
+func (op *Op[T]) GetID() ID {
+	return op.id
+}
+
+func (op *Op[T]) GetParents() []LV {
+	return op.parents
+}

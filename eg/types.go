@@ -52,8 +52,8 @@ type CRDTItem struct {
 }
 
 type CRDTDoc struct {
-	items          []CRDTItem
-	currentVersion []LV
-	delTargets     []LV       // LV of delete OP
-	itemsByLV      []CRDTItem // Map from LV => CRDTItem
+	items          *[]*CRDTItem
+	currentVersion *[]LV
+	delTargets     *[]LV            // LV of delete OP
+	itemsByLV      map[LV]*CRDTItem // Map from LV => CRDTItem
 }
