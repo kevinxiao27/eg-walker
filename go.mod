@@ -4,6 +4,8 @@ go 1.24.3
 
 require (
 	github.com/deckarep/golang-set/v2 v2.8.0
+	github.com/gorilla/mux v1.8.1
+	github.com/gorilla/websocket v1.5.3
 	github.com/sanity-io/litter v1.5.8
 )
 
